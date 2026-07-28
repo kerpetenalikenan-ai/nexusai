@@ -130,6 +130,21 @@ st.markdown(f"""
     ::-webkit-scrollbar {{ width: 6px; }}
     ::-webkit-scrollbar-track {{ background: {bg}; }}
     ::-webkit-scrollbar-thumb {{ background: #3a3a5c; border-radius: 3px; }}
+
+    /* Tüm yazılar beyaz */
+    [data-testid="stSidebar"] * {{ color: white !important; }}
+    [data-testid="stSidebar"] label {{ color: white !important; }}
+    [data-testid="stSidebar"] p {{ color: white !important; }}
+    [data-testid="stSidebar"] .stSelectbox label {{ color: white !important; }}
+    [data-testid="stSidebar"] .stTextInput label {{ color: white !important; }}
+    [data-testid="stSidebar"] .stTextArea label {{ color: white !important; }}
+    [data-testid="stSidebar"] input {{ color: white !important; background-color: #1e1e2e !important; }}
+    [data-testid="stSidebar"] input::placeholder {{ color: #aaaaaa !important; }}
+    [data-testid="stSidebar"] textarea {{ color: white !important; background-color: #1e1e2e !important; }}
+    [data-testid="stSidebar"] .stMarkdown {{ color: white !important; }}
+    /* Ana alan placeholder */
+    input::placeholder {{ color: #aaaaaa !important; }}
+    .stTextInput input {{ color: white !important; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -197,4 +212,3 @@ if submitted and user_input.strip():
                 else:
                     st.error(f"Hata: {err}")
         st.rerun()
-
