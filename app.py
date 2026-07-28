@@ -1,5 +1,8 @@
 import streamlit as st
 from groq import Groq
+import base64
+from PIL import Image
+import io
 
 st.set_page_config(
     page_title="NexusAI",
@@ -40,10 +43,12 @@ with st.sidebar:
         options=[
             "llama-3.1-8b-instant",
             "llama-3.3-70b-versatile",
+        "meta-llama/llama-4-maverick-17b-128e-instruct",
             "gemma2-9b-it",
             "mixtral-8x7b-32768",
         ],
         index=0,
+        help="Fotoğraf göndermek için llama-4-maverick modelini seçin",
     )
     st.session_state.model = model
 
@@ -83,7 +88,7 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-# ─── CSS (arka plan rengi dinamik) ───────────────────────────────────────────
+# ─── CSS ─────────────────────────────────────────────────────────────────────
 bg = st.session_state.bg_color
 st.markdown(f"""
 <style>
@@ -130,19 +135,10 @@ st.markdown(f"""
     ::-webkit-scrollbar {{ width: 6px; }}
     ::-webkit-scrollbar-track {{ background: {bg}; }}
     ::-webkit-scrollbar-thumb {{ background: #3a3a5c; border-radius: 3px; }}
-
-    /* Tüm yazılar beyaz */
     [data-testid="stSidebar"] * {{ color: white !important; }}
-    [data-testid="stSidebar"] label {{ color: white !important; }}
-    [data-testid="stSidebar"] p {{ color: white !important; }}
-    [data-testid="stSidebar"] .stSelectbox label {{ color: white !important; }}
-    [data-testid="stSidebar"] .stTextInput label {{ color: white !important; }}
-    [data-testid="stSidebar"] .stTextArea label {{ color: white !important; }}
     [data-testid="stSidebar"] input {{ color: white !important; background-color: #1e1e2e !important; }}
     [data-testid="stSidebar"] input::placeholder {{ color: #aaaaaa !important; }}
     [data-testid="stSidebar"] textarea {{ color: white !important; background-color: #1e1e2e !important; }}
-    [data-testid="stSidebar"] .stMarkdown {{ color: white !important; }}
-    /* Ana alan placeholder */
     input::placeholder {{ color: #aaaaaa !important; }}
     .stTextInput input {{ color: white !important; }}
 </style>
@@ -159,11 +155,26 @@ st.divider()
 # Mesajları göster
 for msg in st.session_state.messages:
     if msg["role"] == "user":
-        st.markdown(
-            f"<div class='msg-user'>{msg['content']}</div>"
-            "<div class='msg-time' style='text-align:right;'>Sen</div>",
-            unsafe_allow_html=True,
-        )
+        content = msg["content"]
+        if isinstance(content, list):
+            # Fotoğraflı mesaj
+            text_part = next((c["text"] for c in content if c["type"] == "text"), "")
+            img_part = next((c for c in content if c["type"] == "image_url"), None)
+            st.markdown(
+                f"<div class='msg-user'>{text_part}</div>"
+                "<div class='msg-time' style='text-align:right;'>Sen</div>",
+                unsafe_allow_html=True,
+            )
+            if img_part:
+                img_data = img_part["image_url"]["url"].split(",")[1]
+                img_bytes = base64.b64decode(img_data)
+                st.image(Image.open(io.BytesIO(img_bytes)), width=200)
+        else:
+            st.markdown(
+                f"<div class='msg-user'>{content}</div>"
+                "<div class='msg-time' style='text-align:right;'>Sen</div>",
+                unsafe_allow_html=True,
+            )
     else:
         st.markdown(
             f"<div class='msg-ai'>{msg['content']}</div>"
@@ -174,6 +185,15 @@ for msg in st.session_state.messages:
 st.divider()
 
 # ─── Mesaj gönderme ───────────────────────────────────────────────────────────
+uploaded_file = st.file_uploader(
+    "� Fotoğraf ekle (isteğe bağlı)",
+    type=["jpg", "jpeg", "png", "webp"],
+    label_visibility="visible",
+)
+
+if uploaded_file:
+    st.image(uploaded_file, width=200, caption="Yüklenecek fotoğraf")
+
 with st.form(key="chat_form", clear_on_submit=True):
     col1, col2 = st.columns([5, 1])
     with col1:
@@ -185,19 +205,42 @@ with st.form(key="chat_form", clear_on_submit=True):
     with col2:
         submitted = st.form_submit_button("➤ Gönder")
 
-if submitted and user_input.strip():
+if submitted and (user_input.strip() or uploaded_file):
     if not st.session_state.api_key:
         st.error("⚠️ Lütfen sol menüden Groq API key girin.")
     else:
-        st.session_state.messages.append({"role": "user", "content": user_input.strip()})
+        text = user_input.strip() or "Bu fotoğrafı analiz et."
+
+        # Fotoğraf varsa vision modeline geç
+        if uploaded_file:
+            img_bytes = uploaded_file.read()
+            img_b64 = base64.b64encode(img_bytes).decode("utf-8")
+            ext = uploaded_file.type
+            content = [
+                {"type": "text", "text": text},
+                {"type": "image_url", "image_url": {"url": f"data:{ext};base64,{img_b64}"}},
+            ]
+            vision_model = "qwen/qwen3.6-27b"
+        else:
+            content = text
+            vision_model = st.session_state.model
+
+        st.session_state.messages.append({"role": "user", "content": content})
+
         with st.spinner("🤖 NexusAI yazıyor..."):
             try:
                 client = Groq(api_key=st.session_state.api_key)
+                # Vision için sadece son mesajı gönder (geçmiş fotoğrafları atla)
+                api_messages = [{"role": "system", "content": st.session_state.system_prompt}]
+                for m in st.session_state.messages:
+                    if isinstance(m["content"], list):
+                        api_messages.append({"role": m["role"], "content": m["content"]})
+                    else:
+                        api_messages.append({"role": m["role"], "content": m["content"]})
+
                 response = client.chat.completions.create(
-                    model=st.session_state.model,
-                    messages=[
-                        {"role": "system", "content": st.session_state.system_prompt}
-                    ] + st.session_state.messages,
+                    model=vision_model,
+                    messages=api_messages,
                     max_tokens=2048,
                     temperature=0.7,
                 )
