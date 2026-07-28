@@ -19,7 +19,7 @@ if "api_key" not in st.session_state:
 if "model" not in st.session_state:
     st.session_state.model = "llama-3.1-8b-instant"
 if "system_prompt" not in st.session_state:
-    st.session_state.system_prompt = "Sen yardımcı bir yapay zeka asistanısın. Türkçe konuşuyorsun."
+    st.session_state.system_prompt = "Sen yardımcı bir yapay zeka asistanısın. Türkçe konuşuyorsun. Görsel üretemez veya düzenleyemezsin, sadece fotoğrafları analiz edebilirsin. Kullanıcı görsel üretmeni veya düzenlemeni isterse bunu nazikçe belirt."
 if "bg_color" not in st.session_state:
     st.session_state.bg_color = "#0f0f1a"
 
